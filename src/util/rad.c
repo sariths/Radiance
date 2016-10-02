@@ -17,7 +17,7 @@ static const char	RCSid[] = "$Id$";
 #include "paths.h"
 #include "vars.h"
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
   #define DELCMD "del"
   #define RENAMECMD "rename"
 #else
@@ -752,7 +752,10 @@ mkpmapopts(				/* get mkpmap options */
 {
 	/* BEWARE:  This may be called via setdefaults(), so no assumptions */
 
-	*mo = '\0';
+	if (nprocs > 1)
+		sprintf(mo, " -n %d", nprocs);
+	else
+		*mo = '\0';
 	if (!vdef(MKPMAP))
 		return;
 	if (vval(MKPMAP)[0] != '-') {
@@ -1074,7 +1077,7 @@ hiqopts(				/* high quality rendering options */
 }
 
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
 static void
 setenv(			/* set an environment variable */
 	char	*vname,
@@ -1121,7 +1124,7 @@ xferopts(				/* transfer options if indicated */
 			syserr(vval(OPTFILE));
 		sprintf(ro, " @%s", vval(OPTFILE));
 	}
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
 	else if (n > 50) {
 		setenv("ROPT", ro+1);
 		strcpy(ro, " $ROPT");
@@ -1299,7 +1302,7 @@ specview(				/* get proper view spec from vs */
 	if (cp == viewopts)		/* append any additional options */
 		vs++;		/* skip prefixed space if unneeded */
 	strcpy(cp, vs);
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
 	if (strlen(viewopts) > 40) {
 		setenv("VIEW", viewopts);
 		return("$VIEW");
@@ -1367,14 +1370,14 @@ myprintview(			/* print out selected view */
 	VIEW	vwr;
 	char	buf[128];
 	char	*cp;
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
 /* XXX Should we allow something like this for all platforms? */
 /* XXX Or is it still required at all? */
 again:
 #endif
 	if (vopts == NULL)
 		return(-1);
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
 	if (vopts[0] == '$') {
 		vopts = getenv(vopts+1);
 		goto again;

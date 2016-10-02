@@ -11,26 +11,12 @@ static const char RCSid[] = "$Id$";
 #include <stdlib.h>
 #include "rtio.h"
 #include "rtmath.h"
-#include "rtprocess.h"
+#include "paths.h"
 #include "bsdf.h"
 #include "bsdf_m.h"
 #include "random.h"
 #include "triangulate.h"
 #include "platform.h"
-
-#ifdef getc_unlocked		/* avoid horrendous overhead of flockfile */
-#undef getc
-#define getc    getc_unlocked
-#endif
-
-#ifdef _WIN32
-#define	SPECIALS	" \t\"$*?"
-#define QUOTCHAR	'"'
-#else
-#define SPECIALS	" \t\n'\"()${}*?[];|&"
-#define QUOTCHAR	'\''
-#define ALTQUOT		'"'
-#endif
 
 #define MAXRCARG	512
 
@@ -78,7 +64,7 @@ typedef struct {
 	FVECT	uva[2];			/* tangent axes */
 	int	ntris;			/* number of triangles */
 	struct ptri {
-		float	afrac;			/* fraction of total area */
+		double	afrac;			/* fraction of total area */
 		short	vndx[3];		/* vertex indices */
 	}	tri[1];			/* triangle array (extends struct) */
 } POLYTRIS;			/* triangulated polygon */
@@ -142,20 +128,6 @@ surf_type(const char *otype)
 	return(ST_NONE);
 }
 
-/* Check if any of the characters in str2 are found in str1 */
-static int
-matchany(const char *str1, const char *str2)
-{
-	while (*str1) {
-		const char	*cp = str2;
-		while (*cp)
-			if (*cp++ == *str1)
-				return(*str1);
-		++str1;
-	}
-	return(0);
-}
-
 /* Add arguments to oconv command */
 static char *
 oconv_command(int ac, char *av[])
@@ -192,41 +164,6 @@ overrun:
 	exit(1);
 }
 
-/* Convert a set of arguments into a command line for pipe() or system() */
-static char *
-convert_commandline(char *cmd, const int len, char *av[])
-{
-	int	match;
-	char	*cp;
-
-	for (cp = cmd; *av != NULL; av++) {
-		const int	n = strlen(*av);
-		if (cp+n >= cmd+(len-3)) {
-			fputs(progname, stderr);
-			return(NULL);
-		}
-		if (matchany(*av, SPECIALS)) {
-			const int	quote =
-#ifdef ALTQUOT
-				strchr(*av, QUOTCHAR) ? ALTQUOT :
-#endif
-					QUOTCHAR;
-			*cp++ = quote;
-			strcpy(cp, *av);
-			cp += n;
-			*cp++ = quote;
-		} else {
-			strcpy(cp, *av);
-			cp += n;
-		}
-		*cp++ = ' ';
-	}
-	if (cp <= cmd)
-		return(NULL);
-	*--cp = '\0';
-	return(cmd);
-}
-
 /* Open a pipe to/from a command given as an argument list */
 static FILE *
 popen_arglist(char *av[], char *mode)
@@ -244,7 +181,7 @@ popen_arglist(char *av[], char *mode)
 	return(popen(cmd, mode));
 }
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
 /* Execute system command (Windows version) */
 static int
 my_exec(char *av[])
@@ -665,7 +602,7 @@ ssamp_poly(FVECT orig, SURF *sp, double x)
 		sp->priv = (void *)ptp;
 	}
 					/* pick triangle by partial area */
-	for (i = 0; i < ptp->ntris && x > ptp->tri[i].afrac; i++)
+	for (i = 0; i < ptp->ntris-1 && x > ptp->tri[i].afrac; i++)
 		x -= ptp->tri[i].afrac;
 	SDmultiSamp(samp2, 2, x/ptp->tri[i].afrac);
 	samp2[0] *= samp2[1] = sqrt(samp2[1]);
@@ -706,7 +643,11 @@ sample_origin(PARAMS *p, FVECT orig, const FVECT rdir, double x)
 	if (p->nsurfs > nall) {		/* (re)allocate surface area cache */
 		if (projsa) free(projsa);
 		projsa = (double *)malloc(sizeof(double)*p->nsurfs);
-		if (!projsa) return(0);
+		if (projsa == NULL) {
+			fputs(progname, stderr);
+			fputs(": out of memory in sample_origin!\n", stderr);
+			exit(1);
+		}
 		nall = p->nsurfs;
 	}
 					/* compute projected areas */
@@ -749,7 +690,7 @@ sample_uniform(PARAMS *p, int b, FILE *fp)
 						duvw[2]*p->nrm[i] ;
 		if (!sample_origin(p, orig_dir[0], orig_dir[1], samp3[0]))
 			return(0);
-		if (fwrite(orig_dir, sizeof(FVECT), 2, fp) != 2)
+		if (putbinary(orig_dir, sizeof(FVECT), 2, fp) != 2)
 			return(0);
 	}
 	return(1);
@@ -779,7 +720,7 @@ sample_shirchiu(PARAMS *p, int b, FILE *fp)
 						duvw[2]*p->nrm[i] ;
 		if (!sample_origin(p, orig_dir[0], orig_dir[1], samp3[0]))
 			return(0);
-		if (fwrite(orig_dir, sizeof(FVECT), 2, fp) != 2)
+		if (putbinary(orig_dir, sizeof(FVECT), 2, fp) != 2)
 			return(0);
 	}
 	return(1);
@@ -827,7 +768,7 @@ sample_reinhart(PARAMS *p, int b, FILE *fp)
 						duvw[2]*p->nrm[i] ;
 		if (!sample_origin(p, orig_dir[0], orig_dir[1], samp3[0]))
 			return(0);
-		if (fwrite(orig_dir, sizeof(FVECT), 2, fp) != 2)
+		if (putbinary(orig_dir, sizeof(FVECT), 2, fp) != 2)
 			return(0);
 	}
 	return(1);
@@ -878,7 +819,7 @@ sample_klems(PARAMS *p, int b, FILE *fp)
 						duvw[2]*p->nrm[i] ;
 		if (!sample_origin(p, orig_dir[0], orig_dir[1], samp2[0]))
 			return(0);
-		if (fwrite(orig_dir, sizeof(FVECT), 2, fp) != 2)
+		if (putbinary(orig_dir, sizeof(FVECT), 2, fp) != 2)
 			return(0);
 	}
 	return(1);
@@ -1005,7 +946,7 @@ add_surface(int st, const char *oname, FILE *fp)
 	snew = (SURF *)malloc(sizeof(SURF) + sizeof(double)*(n-1));
 	if (snew == NULL) {
 		fputs(progname, stderr);
-		fputs(": out of memory!\n", stderr);
+		fputs(": out of memory in add_surface!\n", stderr);
 		exit(1);
 	}
 	strncpy(snew->sname, oname, sizeof(snew->sname)-1);

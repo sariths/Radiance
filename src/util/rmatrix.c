@@ -9,8 +9,10 @@ static const char RCSid[] = "$Id$";
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
+#include "rtio.h"
+#include "platform.h"
 #include "resolu.h"
-#include "rtprocess.h"
+#include "paths.h"
 #include "rmatrix.h"
 
 static char	rmx_mismatch_warn[] = "WARNING: data type mismatch\n";
@@ -132,7 +134,7 @@ rmx_load_float(RMATRIX *rm, FILE *fp)
 	}
 	for (i = 0; i < rm->nrows; i++)
 	    for (j = 0; j < rm->ncols; j++) {
-		if (fread(val, sizeof(val[0]), rm->ncomp, fp) != rm->ncomp)
+		if (getbinary(val, sizeof(val[0]), rm->ncomp, fp) != rm->ncomp)
 		    return(0);
 	        for (k = rm->ncomp; k--; )
 		     rmx_lval(rm,i,j,k) = val[k];
@@ -152,7 +154,7 @@ rmx_load_double(RMATRIX *rm, FILE *fp)
 	}
 	for (i = 0; i < rm->nrows; i++)
 	    for (j = 0; j < rm->ncols; j++) {
-		if (fread(val, sizeof(val[0]), rm->ncomp, fp) != rm->ncomp)
+		if (getbinary(val, sizeof(val[0]), rm->ncomp, fp) != rm->ncomp)
 		    return(0);
 	        for (k = rm->ncomp; k--; )
 		     rmx_lval(rm,i,j,k) = val[k];
@@ -193,15 +195,11 @@ rmx_load(const char *inspec)
 
 	if (inspec == NULL) {			/* reading from stdin? */
 		inspec = "<stdin>";
-#ifdef _WIN32
-		_setmode(fileno(stdin), _O_BINARY);
-#endif
+		SET_FILE_BINARY(stdin);
 	} else if (inspec[0] == '!') {
 		if ((fp = popen(inspec+1, "r")) == NULL)
 			return(NULL);
-#ifdef _WIN32
-		_setmode(fileno(fp), _O_BINARY);
-#endif
+		SET_FILE_BINARY(stdin);
 	} else {
 		const char	*sp = inspec;	/* check suffix */
 		while (*sp)
@@ -252,9 +250,7 @@ rmx_load(const char *inspec)
 	dnew->info = dinfo.info;
 	switch (dinfo.dtype) {
 	case DTascii:
-#ifdef _WIN32
-		_setmode(fileno(fp), _O_TEXT);
-#endif
+		SET_FILE_TEXT(stdin);
 		if (!rmx_load_ascii(dnew, fp))
 			goto loaderr;
 		dnew->dtype = DTascii;		/* should leave double? */
@@ -328,7 +324,7 @@ rmx_write_float(const RMATRIX *rm, FILE *fp)
 	    for (j = 0; j < rm->ncols; j++) {
 	        for (k = rm->ncomp; k--; )
 		    val[k] = (float)rmx_lval(rm,i,j,k);
-		if (fwrite(val, sizeof(val[0]), rm->ncomp, fp) != rm->ncomp)
+		if (putbinary(val, sizeof(val[0]), rm->ncomp, fp) != rm->ncomp)
 			return(0);
 	    }
 	return(1);
@@ -348,7 +344,7 @@ rmx_write_double(const RMATRIX *rm, FILE *fp)
 	    for (j = 0; j < rm->ncols; j++) {
 	        for (k = rm->ncomp; k--; )
 		    val[k] = rmx_lval(rm,i,j,k);
-		if (fwrite(val, sizeof(val[0]), rm->ncomp, fp) != rm->ncomp)
+		if (putbinary(val, sizeof(val[0]), rm->ncomp, fp) != rm->ncomp)
 			return(0);
 	    }
 	return(1);

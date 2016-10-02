@@ -79,7 +79,7 @@ If the input sky data lacks a header, the
 .I \-n
 option may be used to indicate the number of time steps, which
 will be 1 for a sky vector.
-The sky input file must contain the number of
+The sky input file must otherwise contain the number of
 columns (time steps) specified in each sky patch row,
 whether it is read from the standard input or from a file.
 Input starts from the first patch at the first time step, then the
@@ -93,8 +93,7 @@ or
 .I \-id
 option may be used to specify that sky data is in float or double
 format, respectively, which is more efficient for large matrices.
-These options are unnecessary in the when the sky
-input has a header.
+These options are unnecessary when the sky input includes a header.
 .PP
 Any of the matrix or vector files may be read from a command
 instead of a file by

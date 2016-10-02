@@ -59,6 +59,7 @@ typedef struct {
 	const char	*modname;	/* modifier name */
 	const char	*params;	/* parameter list */
 	EPNODE		*binv;		/* bin value expression */
+	int		bin0;		/* starting bin offset */
 	int		nbins;		/* number of contribution bins */
 	DCOLOR		cbin[1];	/* contribution bins (extends struct) */
 } MODCONT;			/* modifier contribution */
@@ -79,7 +80,7 @@ typedef struct {
 extern LUTAB		ofiletab;	/* output stream table */
 
 #ifndef MAXPROCESS
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
 #define MAXPROCESS	1
 #else
 #define MAXPROCESS	128
@@ -87,7 +88,7 @@ extern LUTAB		ofiletab;	/* output stream table */
 #endif
 
 #ifndef	MAXMODLIST
-#define	MAXMODLIST	2048		/* maximum modifiers we'll track */
+#define	MAXMODLIST	10000		/* maximum modifiers we'll track */
 #endif
 
 extern const char	*modname[MAXMODLIST];	/* ordered modifier name list */

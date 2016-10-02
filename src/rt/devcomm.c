@@ -10,7 +10,7 @@ static const char	RCSid[] = "$Id$";
 #include "copyright.h"
 
 #include <sys/types.h>
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(_WIN64)
 #include <sys/wait.h>
 #endif
 
@@ -147,7 +147,7 @@ comm_close(void)			/* done with driver */
 	fclose(devin);
 	if (devchild < 0)
 		return;
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(_WIN64)
 	while ((pid = wait(0)) != -1 && pid != devchild)
 		;
 #endif
@@ -177,7 +177,7 @@ comm_paintr(	/* paint a rectangle */
 )
 {
 	putc(COM_PAINTR, devout);
-	fwrite((char *)col, sizeof(COLOR), 1, devout);
+	putbinary(col, sizeof(COLOR), 1, devout);
 	putw(xmin, devout);
 	putw(ymin, devout);
 	putw(xmax, devout);
@@ -289,7 +289,7 @@ reply_error(			/* what should we do here? */
 static void
 getstate(void)				/* get driver state variables */
 {
-	fread((char *)&comm_driver.pixaspect,
+	getbinary((char *)&comm_driver.pixaspect,
 			sizeof(comm_driver.pixaspect), 1, devin);
 	comm_driver.xsiz = getw(devin);
 	comm_driver.ysiz = getw(devin);

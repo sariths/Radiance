@@ -37,7 +37,7 @@ static double  l_erf(char *), l_erfc(char *), l_arg(char *);
 
 
 void
-initfunc()	/* initialize function evaluation */
+initfunc(void)	/* initialize function evaluation */
 {
 	if (!rayinitcal[0])	/* already done? */
 		return;
@@ -67,16 +67,30 @@ initfunc()	/* initialize function evaluation */
 void
 set_eparams(char *prms)
 {
-	static char	*last_params = NULL;
+	static char	*last_params;
+	static int	lplen = 0;
+	int		len;
 	char		vname[RMAXWORD];
 	double		value;
 	char		*cpd;
 					/* check if already set */
-	if ((prms == NULL) | (prms == last_params))
+	if (prms == NULL || !*prms)
 		return;
-	if (last_params != NULL && !strcmp(prms, last_params))
+	if (lplen && !strcmp(prms, last_params))
 		return;
-	last_params = prms;		/* assign each variable */
+	len = strlen(prms);		/* record new settings */
+	if ((lplen != 0) & (lplen <= len)) {
+		free(last_params);
+		lplen = 0;
+	}
+	if (!lplen) {
+		lplen = len + 100;
+		last_params = (char *)malloc(lplen);
+		if (last_params == NULL)
+			error(SYSTEM, "out of memory in set_eparams()");
+	}
+	strcpy(last_params, prms);
+					/* assign each variable */
 	while (*prms) {
 		if (isspace(*prms)) {
 			++prms; continue;
@@ -85,7 +99,7 @@ set_eparams(char *prms)
 			goto bad_params;
 		cpd = vname;
 		while (*prms && (*prms != '=') & !isspace(*prms)) {
-			if (!isid(*prms))
+			if (!isid(*prms) | (cpd-vname >= RMAXWORD-1))
 				goto bad_params;
 			*cpd++ = *prms++;
 		}
@@ -286,7 +300,7 @@ loadfunc(			/* load definition file */
 
 	if ((ffname = getpath(fname, getrlibpath(), R_OK)) == NULL) {
 		sprintf(errmsg, "cannot find function file \"%s\"", fname);
-		error(USER, errmsg);
+		error(SYSTEM, errmsg);
 	}
 	fcompile(ffname);
 }
@@ -298,7 +312,7 @@ l_arg(char *nm)			/* return nth real argument */
 	int  n;
 
 	if (fobj == NULL)
-		error(USER, "arg(n) called without a context");
+		error(INTERNAL, "arg(n) called without a modifier context");
 
 	n = argument(1) + .5;		/* round to integer */
 

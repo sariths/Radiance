@@ -2064,3 +2064,54 @@ Fixed issue with vchars.mta and symbols.mta not being installed in
 the appropriate metafile library location, with help from Rob G.
 
 Added ability to give quoted strings to output= directive in rfluxmtx.
+
+****** COMPATIBILITY CHANGE ********
+Added ability to digest color (CIE-XYZ) input in pabopto2bsdf.
+This change alters the .sir (interpolant) format, so these files
+will need to be regenerated.  Use the new "#colorimetry: CIE-XYZ" tag
+to enable on input.
+
+Rewrote bsdf2klems to support tristimulus color and call wrapBSDF.
+Did the same for bsdf2ttree.  Function specifications still gray only.
+
+Reduced a problem where rvu or rholo would be slow to quit when
+run with many processes on a large model or one with a large
+ambient file (taking lots of memory).  We were waiting for
+processes to quit one-by-one, which takes some time for each
+process as it disentangles its shared memory.  We now
+wait for all the processes together, so they can disentangle
+in parallel.  It can still take up to a minute in some cases,
+but not 10 minutes like it was taking before the fix.
+
+Enabled ambient cache value corral for all levels, not just final two.
+This may reduce errors in certain pathological scenes.
+
+Added -in option to rcalc, rlam, and total to limit the number of
+input records in hopes of circumventing Windows EOF issues on binary data.
+Also added -on option to rcalc and total for logical symmetry.
+
+Increased modifier limit to 10,000 in rcontrib.
+
+Fixed issues with glrad and added zoom response to mouse wheel input.
+
+Added missing definition of "ashik2" material type to reference manual.
+
+Changed genBSDF to calculate device thickness assuming Zmax==0 so
+pkgBSDF will generate correct proxy geometry.
+
+Created pabopto2xyz tool to combine different sensor measurements
+into a single CIE-XYZ measurement file for color BSDF interpolation.
+
+Jan Wienold updated evalglare to version 1.30
+
+Roland Schregle added out-of-core photon mapping routines, which
+may be compiled using the PMAP_OOC macro.
+
+Added -a option to getinfo for easy addition of header lines.
+
+Fixed issue with multiple records on picture output in rcontrib (and rfluxmtx).
+Credit to Sarith Subramaniam for pointing out the problem.
+
+Made mkillum more tolerant of non-planar polygons in its sampling routines.
+
+Added "-recover" option to genBSDF to pick up where it left off.

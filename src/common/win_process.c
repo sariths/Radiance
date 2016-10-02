@@ -38,7 +38,6 @@ win_nice(int inc) /* simple nice(2) replacement for Windows */
     in the process that calls ExitProcess.
 	As presented by Andrew Tucker in Windows Developer Magazine.
 */
-#ifndef OBSOLETE_WINDOWS  /* won't work on Win 9X/ME/CE. */
 BOOL SafeTerminateProcess(HANDLE hProcess, UINT uExitCode)
 {
 	DWORD dwTID, dwCode, dwErr = 0;
@@ -78,7 +77,6 @@ BOOL SafeTerminateProcess(HANDLE hProcess, UINT uExitCode)
 	if ( !bSuccess ) SetLastError(dwErr);
 	return bSuccess;
 }
-#endif
 
 
 static int
@@ -190,18 +188,18 @@ error: /* cleanup */
 }
 
 
-static int         /* copied size or -1 on error */
+static size_t         /* copied size or -1 on error */
 wordncopy(         /* copy (quoted) src to dest. */
 
 char * dest,
 char * src,
-int dlen,
+size_t dlen,
 int insert_space,  /* prepend a space  */
 int force_dq       /* turn 'src' into "dest" (for Win command line) */
 )
 {
-	int slen;
-	int pos = 0;
+	size_t slen;
+	size_t pos = 0;
 
 	slen = strlen(src);
 	if (insert_space) {
@@ -245,9 +243,9 @@ char *sl[]       /* list of arguments */
 )
 {
 	static char *cmdstr;
-	static int clen;
+	static size_t clen;
 	char *newcs;
-	int newlen, pos, res, i;
+	size_t newlen, pos, i, res;
 
 	newlen = strlen(cmdpath) + 3; /* allow two quotes plus the final \0 */
 	for (i = 0; sl[i] != NULL; i++) {
@@ -283,6 +281,7 @@ open_process(SUBPROC *proc, char *av[])
 		fputs("Illegal call to open_process()!\n", stderr);
 		return -1;
 	}
+	proc->pid = 0;
 	proc->running = 0;
 	if (av == NULL) { return -1; }
 	cmdpath = getpath(av[0], getenv("PATH"), X_OK);
@@ -299,19 +298,7 @@ int win_kill(RT_PID pid, int sig) /* we ignore sig... */
 	hProc = OpenProcess(SYNCHRONIZE|PROCESS_TERMINATE, FALSE, pid);
 	/*  it looks like we want to ignore errors here */
 	if(hProc != NULL) {
-#ifdef OBSOLETE_WINDOWS
-#define KILL_TIMEOUT 10 * 1000 /* milliseconds */
-		/* it might have some windows open... */
-		EnumWindows((WNDENUMPROC)TerminateAppEnum, (LPARAM)pid);
-		if(WaitForSingleObject(hProc, KILL_TIMEOUT)!=WAIT_OBJECT_0) {
-			/* No way to avoid dangling DLLs here. */
-			TerminateProcess(hProc, 0);
-		}
-#else
 		SafeTerminateProcess(hProc, 0);
-#endif
-		/* WaitForSingleObject(hProc, 0); */
-		/* not much use to wait on Windows */
 		CloseHandle(hProc);
 	}
 	return 0; /* XXX we need to figure out more here... */
@@ -319,21 +306,23 @@ int win_kill(RT_PID pid, int sig) /* we ignore sig... */
 
 
 int
-close_process(SUBPROC *proc) {
-	int icres, ocres;
+close_processes(SUBPROC pd[], int nproc) {
+	int i, icres, ocres;
 	DWORD pid;
 
-	ocres = close(proc->w);
-	icres = close(proc->r);
-	pid = proc->pid;
-	if(ocres != 0 || icres != 0) {
-		/* something went wrong: enforce infanticide */
-		/* other than that, it looks like we want to ignore errors here */
-		if (proc->running) {
-			win_kill(pid, 0);
+	for (i = 0; i < nproc; i++) {
+		if (pd[i].running) {
+			ocres = close(pd[i].w);
+			icres = close(pd[i].r);
+			pd[i].running = 0;
+			if(ocres != 0 || icres != 0) {
+				/* something went wrong: enforce infanticide */
+				/* other than that, it looks like we want to ignore errors */
+				win_kill(pd[i].pid, 0);
+			}
 		}
+		pd[i].pid = 0;
 	}
-	proc->running = 0;
 	return 0; /* XXX we need to figure out more here... */
 }
 

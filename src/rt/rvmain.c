@@ -55,14 +55,13 @@ static void onsig(int  signo);
 static void sigdie(int  signo, char  *msg);
 static void printdefaults(void);
 
-
 int
 main(int argc, char *argv[])
 {
 #define	 check(ol,al)		if (argv[i][ol] || \
 				badarg(argc-i-1,argv+i+1,al)) \
 				goto badopt
-#define	 bool(olen,var)		switch (argv[i][olen]) { \
+#define	 check_bool(olen,var)		switch (argv[i][olen]) { \
 				case '\0': var = !var; break; \
 				case 'y': case 'Y': case 't': case 'T': \
 				case '+': case '1': var = 1; break; \
@@ -148,7 +147,7 @@ main(int argc, char *argv[])
 			}
 			break;
 		case 'b':				/* grayscale */
-			bool(2,greyscale);
+			check_bool(2,greyscale);
 			break;
 		case 'p':				/* pixel */
 			switch (argv[i][2]) {
@@ -172,7 +171,7 @@ main(int argc, char *argv[])
 			break;
 		case 'w':				/* warnings */
 			rval = erract[WARNING].pf != NULL;
-			bool(2,rval);
+			check_bool(2,rval);
 			if (rval) erract[WARNING].pf = wputs;
 			else erract[WARNING].pf = NULL;
 			break;
@@ -198,7 +197,7 @@ main(int argc, char *argv[])
 						/* set up signal handling */
 	sigdie(SIGINT, "Interrupt");
 	sigdie(SIGTERM, "Terminate");
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(_WIN64)
 	sigdie(SIGHUP, "Hangup");
 	sigdie(SIGPIPE, "Broken pipe");
 	sigdie(SIGALRM, "Alarm clock");
@@ -230,13 +229,20 @@ main(int argc, char *argv[])
 	
 	ray_init(octnm);		/* also calls ray_init_pmap() */
 	
+/* temporary shortcut, until winrview is refactored into a "device" */
+#ifndef WIN_RVIEW
 	rview();			/* run interactive viewer */
 
+
 	devclose();			/* close output device */
+#endif
 
 	/* PMAP: free photon maps */
 	ray_done_pmap();
 	
+#ifdef WIN_RVIEW
+	return 1;
+#endif
 	quit(0);
 
 badopt:
@@ -245,7 +251,7 @@ badopt:
 	return 1; /* pro forma return */
 
 #undef	check
-#undef	bool
+#undef	check_bool
 }
 
 
@@ -291,7 +297,7 @@ onsig(				/* fatal signal */
 	if (gotsig++)			/* two signals and we're gone! */
 		_exit(signo);
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(_WIN64)
 	alarm(15);			/* allow 15 seconds to clean up */
 	signal(SIGALRM, SIG_DFL);	/* make certain we do die */
 #endif

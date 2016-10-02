@@ -25,13 +25,10 @@
 
 #include "fvect.h"
 #include "ccolor.h"
+#include "platform.h"
 
 #ifdef __cplusplus
 extern "C" {
-#endif
-
-#ifdef _WIN32
-#define	strcasecmp	stricmp
 #endif
 
 #define	SDnameLn	128		/* maximum BSDF name length */
@@ -126,7 +123,7 @@ typedef struct {
 	char		matn[SDnameLn];	/* material name */
 	char		makr[SDnameLn];	/* manufacturer */
 	char		*mgf;		/* geometric description (if any) */
-	float		dim[3];		/* width, height, thickness (meters) */
+	double		dim[3];		/* width, height, thickness (meters) */
 	SDValue		rLambFront;	/* diffuse front reflectance */
 	SDValue		rLambBack;	/* diffuse rear reflectance */
 	SDValue		tLamb;		/* diffuse transmission */

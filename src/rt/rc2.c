@@ -6,9 +6,10 @@ static const char RCSid[] = "$Id$";
  * File i/o and recovery
  */
 
+#include <ctype.h>
+#include "platform.h"
 #include "rcontrib.h"
 #include "resolu.h"
-#include <ctype.h>
 
 /* Close output stream and free record */
 static void
@@ -183,7 +184,7 @@ getostream(const char *ospec, const char *mname, int bn, int noopen)
 		sop = (STREAMOUT *)malloc(sizeof(STREAMOUT));
 		if (sop == NULL)
 			error(SYSTEM, "out of memory in getostream");
-		sop->outpipe = oname[0] == '!';
+		sop->outpipe = (oname[0] == '!');
 		sop->reclen = 0;
 		sop->ofp = NULL;		/* open iff noopen==0 */
 		sop->xr = xres; sop->yr = yres;
@@ -193,6 +194,12 @@ getostream(const char *ospec, const char *mname, int bn, int noopen)
 			errno = EEXIST;		/* file exists */
 			goto openerr;
 		}
+	} else if (noopen && outfmt == 'c' &&	/* stream exists to picture? */
+			(sop->xr > 0) & (sop->yr > 0)) {
+		if (ofl & OF_BIN)
+			return(NULL);		/* let caller offset bins */
+		sprintf(errmsg, "output '%s' not a valid picture", oname);
+		error(WARNING, errmsg);
 	}
 	if (!noopen && sop->ofp == NULL) {	/* open output stream */
 		if (oname[0] == '!')		/* output to command */
@@ -261,12 +268,12 @@ getvec(FVECT vec)
 		}
 		break;
 	case 'f':					/* binary float */
-		if (fread((char *)vf, sizeof(float), 3, stdin) != 3)
+		if (getbinary((char *)vf, sizeof(float), 3, stdin) != 3)
 			return(-1);
 		VCOPY(vec, vf);
 		break;
 	case 'd':					/* binary double */
-		if (fread((char *)vd, sizeof(double), 3, stdin) != 3)
+		if (getbinary((char *)vd, sizeof(double), 3, stdin) != 3)
 			return(-1);
 		VCOPY(vec, vd);
 		break;
@@ -302,23 +309,23 @@ put_contrib(const DCOLOR cnt, FILE *fout)
 			scalecolor(fv, sf);
 		} else
 			copycolor(fv, cnt);
-		fwrite(fv, sizeof(float), 3, fout);
+		putbinary(fv, sizeof(float), 3, fout);
 		break;
 	case 'd':
 		if (accumulate > 1) {
 			DCOLOR	dv;
 			copycolor(dv, cnt);
 			scalecolor(dv, sf);
-			fwrite(dv, sizeof(double), 3, fout);
+			putbinary(dv, sizeof(double), 3, fout);
 		} else
-			fwrite(cnt, sizeof(double), 3, fout);
+			putbinary(cnt, sizeof(double), 3, fout);
 		break;
 	case 'c':
 		if (accumulate > 1)
 			setcolr(cv, sf*cnt[0], sf*cnt[1], sf*cnt[2]);
 		else
 			setcolr(cv, cnt[0], cnt[1], cnt[2]);
-		fwrite(cv, sizeof(cv), 1, fout);
+		putbinary(cv, sizeof(cv), 1, fout);
 		break;
 	default:
 		error(INTERNAL, "botched output format");
@@ -330,17 +337,17 @@ put_contrib(const DCOLOR cnt, FILE *fout)
 void
 mod_output(MODCONT *mp)
 {
-	STREAMOUT	*sop = getostream(mp->outspec, mp->modname, 0, 0);
+	STREAMOUT	*sop = getostream(mp->outspec, mp->modname, mp->bin0, 0);
 	int		j;
 
 	put_contrib(mp->cbin[0], sop->ofp);
 	if (mp->nbins > 3 &&	/* minor optimization */
-			sop == getostream(mp->outspec, mp->modname, 1, 0)) {
+			sop == getostream(mp->outspec, mp->modname, mp->bin0+1, 0)) {
 		for (j = 1; j < mp->nbins; j++)
 			put_contrib(mp->cbin[j], sop->ofp);
 	} else {
 		for (j = 1; j < mp->nbins; j++) {
-			sop = getostream(mp->outspec, mp->modname, j, 0);
+			sop = getostream(mp->outspec, mp->modname, mp->bin0+j, 0);
 			put_contrib(mp->cbin[j], sop->ofp);
 		}
 	}
@@ -393,14 +400,14 @@ get_contrib(DCOLOR cnt, FILE *finp)
 	case 'a':
 		return(fscanf(finp,"%lf %lf %lf",&cnt[0],&cnt[1],&cnt[2]) == 3);
 	case 'f':
-		if (fread(fv, sizeof(fv[0]), 3, finp) != 3)
+		if (getbinary(fv, sizeof(fv[0]), 3, finp) != 3)
 			return(0);
 		copycolor(cnt, fv);
 		return(1);
 	case 'd':
-		return(fread(cnt, sizeof(cnt[0]), 3, finp) == 3);
+		return(getbinary(cnt, sizeof(cnt[0]), 3, finp) == 3);
 	case 'c':
-		if (fread(cv, sizeof(cv), 1, finp) != 1)
+		if (getbinary(cv, sizeof(cv), 1, finp) != 1)
 			return(0);
 		colr_color(fv, cv);
 		copycolor(cnt, fv);
@@ -438,7 +445,7 @@ reload_output()
 	char		*outvfmt;
 	LUENT		*oent;
 	int		xr, yr;
-	STREAMOUT	sout;
+	STREAMOUT	*sop;
 	DCOLOR		rgbv;
 
 	if (outfmt == 'a')
@@ -451,50 +458,43 @@ reload_output()
 			error(USER, "cannot reload from stdout");
 		if (mp->outspec[0] == '!')
 			error(USER, "cannot reload from command");
-		for (j = 0; ; j++) {		/* load each modifier bin */
-			ofl = ofname(oname, mp->outspec, mp->modname, j);
+		for (j = 0; j < mp->nbins; j++) { /* load each modifier bin */
+			ofl = ofname(oname, mp->outspec, mp->modname, mp->bin0+j);
 			if (ofl < 0)
 				error(USER, "bad output file specification");
 			oent = lu_find(&ofiletab, oname);
-			if (oent->data != NULL) {
-				sout = *(STREAMOUT *)oent->data;
-			} else {
-				sout.reclen = 0;
-				sout.outpipe = 0;
-				sout.xr = xres; sout.yr = yres;
-				sout.ofp = NULL;
-			}
-			if (sout.ofp == NULL) {	/* open output as input */
-				sout.ofp = fopen(oname, fmode);
-				if (sout.ofp == NULL) {
-					if (j == mp->nbins)
-						break;	/* assume end of modifier */
+			if (oent->data == NULL)
+				error(INTERNAL, "unallocated stream in reload_output()");
+			sop = (STREAMOUT *)oent->data;
+			if (sop->ofp == NULL) {	/* open output as input */
+				sop->ofp = fopen(oname, fmode);
+				if (sop->ofp == NULL) {
 					sprintf(errmsg, "missing reload file '%s'",
 							oname);
 					error(WARNING, errmsg);
 					break;
 				}
 #ifdef getc_unlocked
-				flockfile(sout.ofp);
+				flockfile(sop->ofp);
 #endif
-				if (header && checkheader(sout.ofp, outvfmt, NULL) != 1) {
+				if (header && checkheader(sop->ofp, outvfmt, NULL) != 1) {
 					sprintf(errmsg, "format mismatch for '%s'",
 							oname);
 					error(USER, errmsg);
 				}
-				if ((sout.xr > 0) & (sout.yr > 0) &&
-						(!fscnresolu(&xr, &yr, sout.ofp) ||
-							(xr != sout.xr) |
-							(yr != sout.yr))) {
+				if ((sop->reclen == 1) & (sop->xr > 0) & (sop->yr > 0) &&
+						(!fscnresolu(&xr, &yr, sop->ofp) ||
+							(xr != sop->xr) |
+							(yr != sop->yr))) {
 					sprintf(errmsg, "resolution mismatch for '%s'",
 							oname);
 					error(USER, errmsg);
 				}
 			}
 							/* read in RGB value */
-			if (!get_contrib(rgbv, sout.ofp)) {
+			if (!get_contrib(rgbv, sop->ofp)) {
 				if (!j) {
-					fclose(sout.ofp);
+					fclose(sop->ofp);
 					break;		/* ignore empty file */
 				}
 				if (j < mp->nbins) {
@@ -503,21 +503,8 @@ reload_output()
 					error(USER, errmsg);
 				}
 				break;
-			}
-			if (j >= mp->nbins) {		/* check modifier size */
-				sprintf(errmsg,
-				"mismatched -bn setting for reloading '%s'",
-						modname[i]);
-				error(USER, errmsg);
-			}
-				
+			}				
 			copycolor(mp->cbin[j], rgbv);
-			if (oent->key == NULL)		/* new file entry */
-				oent->key = strcpy((char *)
-						malloc(strlen(oname)+1), oname);
-			if (oent->data == NULL)
-				oent->data = (char *)malloc(sizeof(STREAMOUT));
-			*(STREAMOUT *)oent->data = sout;
 		}
 	}
 	lu_doall(&ofiletab, &myclose, NULL);	/* close all files */
@@ -553,7 +540,7 @@ recover_output()
 	int		ofl;
 	char		oname[1024];
 	LUENT		*oent;
-	STREAMOUT	sout;
+	STREAMOUT	*sop;
 	off_t		nvals;
 	int		xr, yr;
 
@@ -582,87 +569,61 @@ recover_output()
 			error(USER, "cannot recover from stdout");
 		if (mp->outspec[0] == '!')
 			error(USER, "cannot recover from command");
-		for (j = 0; ; j++) {		/* check each bin's file */
-			ofl = ofname(oname, mp->outspec, mp->modname, j);
+		for (j = 0; j < mp->nbins; j++) { /* check each bin's file */
+			ofl = ofname(oname, mp->outspec, mp->modname, mp->bin0+j);
 			if (ofl < 0)
 				error(USER, "bad output file specification");
 			oent = lu_find(&ofiletab, oname);
-			if (oent->data != NULL) {
-				sout = *(STREAMOUT *)oent->data;
-			} else {
-				sout.reclen = 0;
-				sout.outpipe = 0;
-				sout.ofp = NULL;
-			}
-			if (sout.ofp != NULL) {	/* already open? */
+			if (oent->data == NULL)
+				error(INTERNAL, "unallocated stream in recover_output()");
+			sop = (STREAMOUT *)oent->data;
+			if (sop->ofp != NULL) {	/* already open? */
 				if (ofl & OF_BIN)
 					continue;
 				break;
 			}
 						/* open output */
-			sout.ofp = fopen(oname, "rb+");
-			if (sout.ofp == NULL) {
-				if (j == mp->nbins)
-					break;	/* assume end of modifier */
+			sop->ofp = fopen(oname, "rb+");
+			if (sop->ofp == NULL) {
 				sprintf(errmsg, "missing recover file '%s'",
 						oname);
 				error(WARNING, errmsg);
+				lastout = 0;
 				break;
 			}
-			nvals = lseek(fileno(sout.ofp), 0, SEEK_END);
+			nvals = lseek(fileno(sop->ofp), 0, SEEK_END);
 			if (nvals <= 0) {
 				lastout = 0;	/* empty output, quit here */
-				fclose(sout.ofp);
+				fclose(sop->ofp);
 				break;
 			}
-			if (!sout.reclen) {
-				if (!(ofl & OF_BIN)) {
-					sprintf(errmsg,
-						"need -bn to recover file '%s'",
-							oname);
-					error(USER, errmsg);
-				}
-				recsiz = outvsiz;
-			} else
-				recsiz = outvsiz * sout.reclen;
+			recsiz = outvsiz * sop->reclen;
 
-			lseek(fileno(sout.ofp), 0, SEEK_SET);
-			if (header && checkheader(sout.ofp, outvfmt, NULL) != 1) {
+			lseek(fileno(sop->ofp), 0, SEEK_SET);
+			if (header && checkheader(sop->ofp, outvfmt, NULL) != 1) {
 				sprintf(errmsg, "format mismatch for '%s'",
 						oname);
 				error(USER, errmsg);
 			}
-			sout.xr = xres; sout.yr = yres;
-			if ((sout.xr > 0) & (sout.yr > 0) &&
-					(!fscnresolu(&xr, &yr, sout.ofp) ||
-						(xr != sout.xr) |
-						(yr != sout.yr))) {
+			if ((sop->reclen == 1) & (sop->xr > 0) & (sop->yr > 0) &&
+					(!fscnresolu(&xr, &yr, sop->ofp) ||
+						(xr != sop->xr) |
+						(yr != sop->yr))) {
 				sprintf(errmsg, "resolution mismatch for '%s'",
 						oname);
 				error(USER, errmsg);
 			}
-			nvals = (nvals - (off_t)ftell(sout.ofp)) / recsiz;
+			nvals = (nvals - (off_t)ftell(sop->ofp)) / recsiz;
 			if ((lastout < 0) | (nvals < lastout))
 				lastout = nvals;
-			if (oent->key == NULL)	/* new entry */
-				oent->key = strcpy((char *)
-						malloc(strlen(oname)+1), oname);
-			if (oent->data == NULL)
-				oent->data = (char *)malloc(sizeof(STREAMOUT));
-			*(STREAMOUT *)oent->data = sout;
 			if (!(ofl & OF_BIN))
 				break;		/* no bin separation */
 		}
 		if (!lastout) {			/* empty output */
 			error(WARNING, "no previous data to recover");
-			lu_done(&ofiletab);	/* reclose all outputs */
+						/* reclose all outputs */
+			lu_doall(&ofiletab, &myclose, NULL);
 			return;
-		}
-		if (j > mp->nbins) {		/* check modifier size */
-			sprintf(errmsg,
-				"mismatched -bn setting for recovering '%s'",
-					modname[i]);
-			error(USER, errmsg);
 		}
 	}
 	if (lastout < 0) {

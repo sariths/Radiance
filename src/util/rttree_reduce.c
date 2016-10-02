@@ -44,7 +44,7 @@ double	tthresh;		/* acceptance threshold (TBD) */
 static void
 new_kids(TNODE *pn)
 {
-	pn->kid = (TNODE *)calloc(1<<ttrank, sizeof(TNODE));
+	pn->kid = (TNODE *)calloc((size_t)1<<ttrank, sizeof(TNODE));
 	if (pn->kid == NULL)
 		error(SYSTEM, "out of memory in new_kids");
 }
@@ -201,7 +201,7 @@ read_float(float *rowp, int n)
 
 	if ((rowp == NULL) | (n <= 0))
 		return(0);
-	nread = fread(rowp, sizeof(float), n, stdin);
+	nread = getbinary(rowp, sizeof(float), n, stdin);
 	if (nread != n)
 		error(USER, "unexpected EOF on float input");
 	return(nread);
@@ -227,7 +227,7 @@ read_double(float *rowp, int n)
 		if (rowbuf == NULL)
 			error(SYSTEM, "out of memory in read_double");
 	}
-	nread = fread(rowbuf, sizeof(double), n, stdin);
+	nread = getbinary(rowbuf, sizeof(double), n, stdin);
 	if (nread != n)
 		error(USER, "unexpected EOF on double input");
 	for (i = 0; i < nread; i++)
@@ -276,7 +276,7 @@ load_data(void)
 		error(COMMAND, "unsupported input format");
 		break;
 	}
-	datarr = (float *)calloc(1<<(log2g*ttrank), sizeof(float));
+	datarr = (float *)calloc((size_t)1<<(log2g*ttrank), sizeof(float));
 	if (datarr == NULL)
 		error(SYSTEM, "out of memory in load_data");
 	if (ttrank == 3) {

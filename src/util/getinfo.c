@@ -20,7 +20,7 @@ static const char	RCSid[] = "$Id$";
 #define putchar		putchar_unlocked
 #endif
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
 #include <process.h>
 #define	execvp	_execvp
 #endif
@@ -71,6 +71,20 @@ main(
 		execvp(argv[2], argv+2);
 		perror(argv[2]);
 		return 1;
+	} else if (argc > 2 && !strcmp(argv[1], "-a")) {
+		SET_FILE_BINARY(stdin);
+		SET_FILE_BINARY(stdout);
+		getheader(stdin, (gethfunc *)fputs, stdout);
+		for (i = 2; i < argc; i++) {
+			int	len = strlen(argv[i]);
+			if (!len) continue;
+			fputs(argv[i], stdout);
+			if (argv[i][len-1] != '\n')
+				fputc('\n', stdout);
+		}
+		fputc('\n', stdout);
+		copycat();
+		return 0;
 	} else if (argc == 2 && !strcmp(argv[1], "-")) {
 		SET_FILE_BINARY(stdin);
 		SET_FILE_BINARY(stdout);

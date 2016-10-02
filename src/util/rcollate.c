@@ -11,20 +11,13 @@ static const char RCSid[] = "$Id$";
 #include "platform.h"
 #include "rtio.h"
 #include "resolu.h"
-#ifdef _WIN32
-#undef ftello
-#define	ftello	ftell
-#undef ssize_t
-#define ssize_t	size_t
+#if defined(_WIN32) || defined(_WIN64)
+  #undef ftello
+  #define	ftello	ftell
+  #undef ssize_t
+  #define ssize_t	size_t
 #else
-#include <sys/mman.h>
-#endif
-
-#ifdef getc_unlocked            /* avoid horrendous overhead of flockfile */
-#undef getc
-#undef putc
-#define getc    getc_unlocked
-#define putc    putc_unlocked
+  #include <sys/mman.h>
 #endif
 
 typedef struct {
@@ -99,7 +92,8 @@ load_file(MEMLOAD *mp, FILE *fp)
 	int	fd;
 	off_t	skip, flen;
 
-#ifdef _WIN32				/* too difficult to fix this */
+#if defined(_WIN32) || defined(_WIN64)
+				/* too difficult to fix this */
 	return load_stream(mp, fp);
 #endif
 	if (mp == NULL)
@@ -144,6 +138,7 @@ load_file(MEMLOAD *mp, FILE *fp)
 static RECINDEX *
 index_records(const MEMLOAD *mp, int nw_rec)
 {
+	int		nall = 0;
 	RECINDEX	*rp;
 	char		*cp, *mend;
 	int		n;
@@ -152,7 +147,8 @@ index_records(const MEMLOAD *mp, int nw_rec)
 		return(NULL);
 	if (nw_rec <= 0)
 		return(NULL);
-	rp = (RECINDEX *)malloc(sizeof(RECINDEX) + mp->len/(2*nw_rec)*sizeof(char *));
+	nall = 1000;
+	rp = (RECINDEX *)malloc(sizeof(RECINDEX) + nall*sizeof(char *));
 	if (rp == NULL)
 		return(NULL);
 	rp->nw_rec = nw_rec;
@@ -164,6 +160,13 @@ index_records(const MEMLOAD *mp, int nw_rec)
 			++cp;
 		if (cp >= mend)
 			break;
+		if (rp->nrecs >= nall) {
+			nall += nall>>1;	/* get more record space */
+			rp = (RECINDEX *)realloc(rp,
+					sizeof(RECINDEX) + nall*sizeof(char *));
+			if (rp == NULL)
+				return(NULL);
+		}
 		rp->rec[rp->nrecs++] = cp;	/* point to first non-white */
 		n = rp->nw_rec;
 		while (++cp < mend)		/* find end of record */
@@ -359,9 +362,9 @@ do_transpose(const MEMLOAD *mp)
 			print_record(rp, j*ni_columns + i);
 			putc(tabEOL[j >= no_columns-1], stdout);
 		} else {			/* binary output */
-			fwrite((char *)mp->base +
+			putbinary((char *)mp->base +
 					(n_comp*comp_size)*(j*ni_columns + i),
-					n_comp*comp_size, 1, stdout);
+					comp_size, n_comp, stdout);
 		}
 	    if (ferror(stdout)) {
 		fprintf(stderr, "Error writing to stdout\n");

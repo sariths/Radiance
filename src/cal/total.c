@@ -12,6 +12,7 @@ static const char	RCSid[] = "$Id$";
 #include  <ctype.h>
 #include  <math.h>
 #include  "platform.h"
+#include  "rtio.h"
 
 #define  MAXCOL		8192		/* maximum number of columns */
 
@@ -22,6 +23,9 @@ static const char	RCSid[] = "$Id$";
 
 double  init_val[] = {0., 1., -1e12, 1e12};	/* initial values */
 
+long  incnt = 0;			/* limit number of input records? */
+long  outcnt = 0;			/* limit number of output records? */
+
 int  func = ADD;			/* default function */
 double  power = 0.0;			/* power for sum */
 int  mean = 0;				/* compute mean */
@@ -30,6 +34,7 @@ int  nbicols = 0;			/* number of binary input columns */
 int  bocols = 0;			/* produce binary output columns */
 int  tabc = '\t';			/* default separator */
 int  subtotal = 0;			/* produce subtotals? */
+int  nrecsout = 0;			/* number of records produced */
 
 static int execute(char *fname);
 
@@ -72,6 +77,9 @@ char  *argv[]
 					break;
 				case 'i':
 					switch (argv[a][2]) {
+					case 'n':
+						incnt = atol(argv[++a]);
+						break;
 					case 'a':
 						nbicols = 0;
 						break;
@@ -105,6 +113,9 @@ char  *argv[]
 					break;
 				case 'o':
 					switch (argv[a][2]) {
+					case 'n':
+						outcnt = atol(argv[++a]);
+						break;
 					case 'a':
 						bocols = 0;
 						break;
@@ -143,7 +154,7 @@ char  *argv[]
 	if (a >= argc)
 		status = execute(NULL) == -1 ? 1 : status;
 	else
-		for ( ; a < argc; a++)
+		for ( ; a < argc && (outcnt <= 0 || nrecsout < outcnt); a++)
 			status = execute(argv[a]) == -1 ? 2 : status;
 	exit(status);
 }
@@ -160,11 +171,11 @@ getrecord(			/* read next input record */
 	int   nf;
 						/* reading binary input? */
 	if (nbicols > 0)
-		return(fread(field, sizeof(double), nbicols, fp));
+		return(getbinary(field, sizeof(double), nbicols, fp));
 	if (nbicols < 0) {
 		float	*fbuf = (float *)buf;
 		int	i;
-		nf = fread(fbuf, sizeof(float), -nbicols, fp);
+		nf = getbinary(fbuf, sizeof(float), -nbicols, fp);
 		for (i = nf; i-- > 0; )
 			field[i] = fbuf[i];
 		return(nf);
@@ -201,14 +212,14 @@ putrecord(			/* write out results record */
 {
 						/* binary output? */
 	if (bocols > 0) {
-		fwrite(field, sizeof(double), n, fp);
+		putbinary(field, sizeof(double), n, fp);
 		return;
 	}
 	if (bocols < 0) {
 		float	fv;
 		while (n-- > 0) {
 			fv = *field++;
-			fwrite(&fv, sizeof(float), 1, fp);
+			putbinary(&fv, sizeof(float), 1, fp);
 		}
 		return;
 	}
@@ -261,6 +272,7 @@ char  *fname
 		}
 		ncol = 0;
 		for (nlin = 0; (count <= 0 || nlin < count) &&
+				(incnt <= 0 || nlin < incnt) &&
 				(nread = getrecord(inpval, fp)) > 0;
 				nlin++) {
 							/* compute */
@@ -311,8 +323,13 @@ char  *fname
 				result[n] = rsign[n] * exp(result[n]);
 		}
 		putrecord(result, ncol, stdout);
+		++nrecsout;
+		if (outcnt > 0 && nrecsout >= outcnt)
+			break;
 		if (!subtotal)
 			ltotal = 0;
+		if (incnt > 0 && nlin >= incnt)
+			break;
 	}
 							/* close input */
 	return(fclose(fp));

@@ -12,7 +12,7 @@ static const char RCSid[] = "$Id$";
 #include "copyright.h"
 
 #include <time.h>
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
   #include <winsock.h> /* struct timeval. XXX find a replacement? */
 #else
   #include <sys/time.h>
@@ -20,6 +20,7 @@ static const char RCSid[] = "$Id$";
 #include <ctype.h>
 #include <string.h>
 
+#include "platform.h"
 #include "paths.h"
 #include "ranimove.h"
 
@@ -169,7 +170,7 @@ userr:
 
 void
 eputs(				/* put string to stderr */
-	register char  *s
+	char  *s
 )
 {
 	static int  midline = 0;
@@ -189,8 +190,7 @@ eputs(				/* put string to stderr */
 
 
 void
-quit(ec)			/* make sure exit is called */
-int	ec;
+quit(int ec)			/* make sure exit is called */
 {
 	if (ray_pnprocs > 0)	/* close children if any */
 		ray_pclose(0);		
@@ -349,7 +349,7 @@ setrendparams(	/* set global rendering parameters */
 	av[ac=0] = NULL;
 				/* load options from file, first */
 	if (optf != NULL && *optf) {
-		ac = wordfile(av, optf);
+		ac = wordfile(av, 1024, optf);
 		if (ac < 0) {
 			sprintf(errmsg, "cannot load options file \"%s\"",
 					optf);
@@ -358,7 +358,7 @@ setrendparams(	/* set global rendering parameters */
 	}
 				/* then from options string */
 	if (qval != NULL && qval[0] == '-')
-		ac += wordstring(av+ac, qval);
+		ac += wordstring(av+ac, 1024-ac, qval);
 
 				/* restore default parameters */
 	ray_restore(NULL);
@@ -391,8 +391,8 @@ getradfile(		/* run rad and get needed variables */
 {
 	static short	mvar[] = {OCONV,OCTREEF,RESOLUTION,EXPOSURE,-1};
 	char	combuf[256];
-	register int	i;
-	register char	*cp;
+	int	i;
+	char	*cp;
 	char	*pippt = NULL;
 					/* create rad command */
 	strcpy(lorendoptf, "ranim0.opt");
@@ -468,7 +468,7 @@ animate(void)			/* run through animation */
 }
 
 
-extern VIEW *
+VIEW *
 getview(			/* get view number n */
 	int	n
 )
@@ -503,7 +503,7 @@ getview(			/* get view number n */
 		viewnum = 0;
 	}
 	if (n < 0) {				/* get next view */
-		register int	c = getc(viewfp);
+		int	c = getc(viewfp);
 		if (c == EOF)
 			return(NULL);			/* that's it */
 		ungetc(c, viewfp);
@@ -532,7 +532,7 @@ countviews(void)			/* count views in view file */
 }
 
 
-extern char *
+char *
 getexp(			/* get exposure for nth frame */
 	int	n
 )
@@ -541,7 +541,7 @@ getexp(			/* get exposure for nth frame */
 	static char	expval[32];
 	static FILE	*expfp = NULL;
 	static int	curfrm = 0;
-	register char	*cp;
+	char	*cp;
 
 	if (n == 0) {				/* signal to close file */
 		if (expfp != NULL) {
@@ -591,7 +591,7 @@ formerr:
 }
 
 
-extern double
+double
 expspec_val(			/* get exposure value from spec. */
 	char	*s
 )
@@ -608,7 +608,7 @@ expspec_val(			/* get exposure value from spec. */
 }
 
 
-extern char *
+char *
 getoctspec(			/* get octree for the given frame */
 	int	n
 )
@@ -665,11 +665,11 @@ getoctspec(			/* get octree for the given frame */
 
 static char *
 getobjname(			/* get fully qualified object name */
-	register struct ObjMove	*om
+	struct ObjMove	*om
 )
 {
 	static char	objName[512];
-	register char	*cp = objName;
+	char	*cp = objName;
 	
 	strcpy(cp, om->name);
 	while (om->parent >= 0) {
@@ -684,7 +684,7 @@ getobjname(			/* get fully qualified object name */
 
 static char *
 getxf(			/* get total transform for object */
-	register struct ObjMove	*om,
+	struct ObjMove	*om,
 	int	n
 )
 {
@@ -697,7 +697,7 @@ getxf(			/* get total transform for object */
 	char		*av[64];
 	int		ac;
 	int		i;
-	register char	*cp;
+	char	*cp;
 					/* get parent transform, first */
 	if (om->parent >= 0)
 		xfp = getxf(&obj_move[om->parent], n);
@@ -805,7 +805,7 @@ getxf(			/* get total transform for object */
 }
 
 
-extern int
+int
 getmove(				/* find matching move object */
 	OBJECT	obj
 )
@@ -814,7 +814,7 @@ getmove(				/* find matching move object */
 	static OBJECT	lasto = OVOID;
 	char	*onm, *objnm;
 	int	len, len2;
-	register int	i;
+	int	i;
 
 	if (obj == OVOID)
 		return(-1);
@@ -839,7 +839,7 @@ getmove(				/* find matching move object */
 }
 
 
-extern double
+double
 obj_prio(			/* return priority for object */
 	OBJECT	obj
 )
@@ -852,7 +852,7 @@ obj_prio(			/* return priority for object */
 }
 
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
 				/* replacement function for Windoze */
 static int
 gettimeofday(struct timeval *tp, void *dummy)
@@ -890,7 +890,7 @@ gettimeofday(struct timeval *tp, void *dummy)
 
 #endif
 
-extern double
+double
 getTime(void)			/* get current time (CPU or real) */
 {
 	struct timeval	time_now;

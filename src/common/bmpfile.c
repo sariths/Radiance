@@ -453,7 +453,7 @@ BMPdecodePixel(int i, const BMPReader *br)
 	case 8:
 		return br->hdr->palette[br->scanline[i]];
 	case 1:
-		return br->hdr->palette[br->scanline[i>>3]>>((7-i)&7) & 1];
+		return br->hdr->palette[br->scanline[i>>3]>>(7-(i&7)) & 1];
 	case 4:
 		return br->hdr->palette[br->scanline[i>>1]>>(i&1?4:0) & 0xf];
 	case 16:
@@ -549,7 +549,7 @@ BMPmappedHeader(int xr, int yr, int infolen, int ncolors)
 	else
 		return NULL;
 	hdr = (BMPHeader *)malloc(sizeof(BMPHeader) +
-					sizeof(RGBquad)*(1<<n) -
+					sizeof(RGBquad)*((size_t)1<<n) -
 					sizeof(hdr->palette) +
 					infolen);
 	if (hdr == NULL)
@@ -563,7 +563,7 @@ BMPmappedHeader(int xr, int yr, int infolen, int ncolors)
 	hdr->nColors = ncolors;
 	hdr->impColors = 0;			/* says all colors important */
 	hdr->infoSiz = infolen;
-	memset((void *)hdr->palette, 0, sizeof(RGBquad)*(1<<n) + infolen);
+	memset((void *)hdr->palette, 0, sizeof(RGBquad)*((size_t)1<<n) + infolen);
 	for (n = ncolors; n--; )
 		hdr->palette[n].r = hdr->palette[n].g =
 			hdr->palette[n].b = n*255/(ncolors-1);

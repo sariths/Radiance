@@ -55,7 +55,7 @@ time_t	reporttime;		/* time for next report */
 off_t	maxdisk;		/* maximum file space (bytes) */
 
 int	rtargc = 1;		/* rtrace command */
-char	*rtargv[128] = {"rtrace", NULL};
+char	*rtargv[MAXRTARGC] = {"rtrace", NULL};
 
 int	orig_mode = -1;		/* original file mode (-1 if unchanged) */
 
@@ -184,7 +184,7 @@ onsig(				/* fatal signal */
 		hdsync(NULL, 0);	/* don't leave w/o saying goodbye */
 		_exit(signo);
 	}
-	alarm(300);			/* allow 5 minutes to clean up */
+	alarm(300);			/* allow 10 minutes to clean up */
 	eputs("signal - ");
 	eputs(sigerr[signo]);
 	eputs("\n");
@@ -415,7 +415,7 @@ setdefaults(			/* set default values */
 	}
 				/* append rendering options */
 	if (vdef(RENDER))
-		rtargc += wordstring(rtargv+rtargc, vval(RENDER));
+		rtargc += wordstring(rtargv+rtargc, MAXRTARGC-rtargc, vval(RENDER));
 	
 	if (gp == NULL)		/* already initialized? */
 		return;

@@ -73,6 +73,9 @@ struct field  *inpfmt = NULL;   /* input record format */
 struct field  *outfmt = NULL;   /* output record structure */
 struct strvar  *svhead = NULL;  /* string variables */
 
+long  incnt = 0;		/* limit number of input records? */
+long  outcnt = 0;		/* limit number of output records? */
+
 int  blnkeq = 1;                /* blanks compare equal? */
 int  igneol = 0;                /* ignore end of line? */
 int  passive = 0;		/* passive mode (transmit unmatched input) */
@@ -157,6 +160,9 @@ char  *argv[]
 				nbicols = 0;
 				readfmt(argv[++i], 0);
 				break;
+			case 'n':
+				incnt = atol(argv[++i]);
+				break;
 			case 'a':
 				itype = 'a';
 				nbicols = 0;
@@ -196,6 +202,9 @@ char  *argv[]
 			case '\0':
 				otype = 'a';
 				readfmt(argv[++i], 1);
+				break;
+			case 'n':
+				outcnt = atol(argv[++i]);
 				break;
 			case 'a':
 				otype = 'a';
@@ -272,14 +281,14 @@ FILE  *fp
 	if (inpfmt != NULL)
 		return(getrec());
 	if (tolower(itype) == 'd') {
-		if (fread(inpbuf, sizeof(double), nbicols, fp) != nbicols)
+		if (getbinary(inpbuf, sizeof(double), nbicols, fp) != nbicols)
 			return(0);
 		if (itype == 'D')
 			swap64(inpbuf, nbicols);
 		return(1);
 	}
 	if (tolower(itype) == 'f') {
-		if (fread(inpbuf, sizeof(float), nbicols, fp) != nbicols)
+		if (getbinary(inpbuf, sizeof(float), nbicols, fp) != nbicols)
 			return(0);
 		if (itype == 'F')
 			swap32(inpbuf, nbicols);
@@ -323,6 +332,10 @@ char  *file
 			putout();
 			++nout;
 		}
+		if (incnt && nrecs >= incnt)
+			break;
+		if (outcnt && nout >= outcnt)
+			break;
 	}
 	fclose(fp);
 }
@@ -453,7 +466,7 @@ double  v
 	float	fval = v;
 
 	while (++colpos < n)
-		fwrite(zerobuf,
+		putbinary(zerobuf,
 			tolower(otype)=='d' ? sizeof(double) : sizeof(float),
 			1, stdout);
 	switch (otype) {
@@ -461,13 +474,13 @@ double  v
 		swap64((char *)&v, 1);
 		/* fall through */
 	case 'd':
-		fwrite(&v, sizeof(double), 1, stdout);
+		putbinary(&v, sizeof(double), 1, stdout);
 		break;
 	case 'F':
 		swap32((char *)&fval, 1);
 		/* fall through */
 	case 'f':
-		fwrite(&fval, sizeof(float), 1, stdout);
+		putbinary(&fval, sizeof(float), 1, stdout);
 		break;
 	}
 }

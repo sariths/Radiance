@@ -101,8 +101,10 @@ addmodifier(char *modn, char *outf, char *prms, char *binv, int bincnt)
 		sprintf(errmsg, "duplicate modifier '%s'", modn);
 		error(USER, errmsg);
 	}
-	if (nmods >= MAXMODLIST)
-		error(INTERNAL, "too many modifiers");
+	if (nmods >= MAXMODLIST) {
+		sprintf(errmsg, "too many modifiers (%d limit)", MAXMODLIST);
+		error(INTERNAL, errmsg);
+	}
 	if (!strcmp(modn, VOIDID)) {
 		sprintf(errmsg, "cannot track '%s' modifier", VOIDID);
 		error(USER, errmsg);
@@ -131,13 +133,17 @@ addmodifier(char *modn, char *outf, char *prms, char *binv, int bincnt)
 		error(SYSTEM, "out of memory in addmodifier");
 	mp->outspec = outf;		/* XXX assumes static string */
 	mp->modname = modn;		/* XXX assumes static string */
-	mp->params = prms;
+	mp->params = prms;		/* XXX assumes static string */
 	mp->binv = ebinv;
+	mp->bin0 = 0;
 	mp->nbins = bincnt;
 	memset(mp->cbin, 0, sizeof(DCOLOR)*bincnt);
-					/* allocate output streams */
-	for (i = bincnt; i-- > 0; )
-		getostream(mp->outspec, mp->modname, i, 1);
+					/* figure out starting bin */
+	while (!getostream(mp->outspec, mp->modname, mp->bin0, 1))
+		mp->bin0++;
+					/* allocate other output streams */
+	for (i = 0; ++i < mp->nbins; )
+		getostream(mp->outspec, mp->modname, mp->bin0+i, 1);
 	lep->data = (char *)mp;
 	return(mp);
 }
@@ -150,9 +156,15 @@ addmodfile(char *fname, char *outf, char *prms, char *binv, int bincnt)
 	char	*mname[MAXMODLIST];
 	int	i;
 					/* find the file & store strings */
-	if (wordfile(mname, getpath(fname, getrlibpath(), R_OK)) < 0) {
+	i = wordfile(mname, MAXMODLIST, getpath(fname, getrlibpath(), R_OK));
+	if (i < 0) {
 		sprintf(errmsg, "cannot find modifier file '%s'", fname);
 		error(SYSTEM, errmsg);
+	}
+	if (i >= MAXMODLIST-1) {
+		sprintf(errmsg, "too many modifiers (%d limit) in file '%s'",
+				MAXMODLIST-1, fname);
+		error(INTERNAL, errmsg);
 	}
 	for (i = 0; mname[i]; i++)	/* add each one */
 		addmodifier(mname[i], outf, prms, binv, bincnt);
@@ -172,7 +184,7 @@ quit(			/* quit program */
 
 /* Initialize our process(es) */
 static void
-rcinit()
+rcinit(void)
 {
 	int	i;
 
@@ -293,7 +305,7 @@ eval_rad(FVECT org, FVECT dir, double dmax)
 
 /* Accumulate and/or output ray contributions (child or only process) */
 static void
-done_contrib()
+done_contrib(void)
 {
 	MODCONT	*mp;
 	int	i;
@@ -314,7 +326,7 @@ done_contrib()
 
 /* Principal calculation loop (called by main) */
 void
-rcontrib()
+rcontrib(void)
 {
 	static int	ignore_warning_given = 0;
 	FVECT		orig, direc;

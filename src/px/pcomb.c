@@ -9,13 +9,13 @@ static const char	RCSid[] = "$Id$";
 
 #include "platform.h"
 #include "standard.h"
-#include "rtprocess.h"
+#include "paths.h"
 #include "color.h"
 #include "calcomp.h"
 #include "view.h"
 
 #define MAXINP		1024		/* maximum number of input files */
-#define WINSIZ		64		/* scanline window size */
+#define WINSIZ		127		/* scanline window size */
 #define MIDSCN		((WINSIZ-1)/2+1)
 
 struct {

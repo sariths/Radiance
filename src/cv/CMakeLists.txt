@@ -35,6 +35,9 @@ if (NOT WIN32)
   add_executable(pabopto2bsdf pabopto2bsdf.c bsdfrep.c bsdfrbf.c bsdfmesh.c bsdftrans.cpp)
   target_link_libraries(pabopto2bsdf rtrad) 
 
+  add_executable(pabopto2xyz pabopto2xyz.c)
+  target_link_libraries(pabopto2xyz rtrad)
+
   add_executable(pabopto2rad	pabopto2bsdf.c bsdfrep.c bsdfrbf.c bsdfmesh.c bsdftrans.cpp)
   target_link_libraries(pabopto2rad rtrad)
   set_target_properties(pabopto2rad PROPERTIES COMPILE_DEFINITIONS TEST_MAIN)
@@ -44,8 +47,10 @@ endif()
 add_executable(bsdf2rad	bsdf2rad.c bsdfrep.c bsdfinterp.c)
 target_link_libraries(bsdf2rad rtrad)
 
-add_executable(bsdfquery bsdfquery.c bsdfrep.c bsdfinterp.c)
-target_link_libraries(bsdfquery rtrad)
+if(BUILD_TESTING)
+  add_executable(bsdfquery bsdfquery.c bsdfrep.c bsdfinterp.c)
+  target_link_libraries(bsdfquery rtrad)
+endif()
 
 add_executable(bsdf2ttree bsdf2ttree.c bsdfrep.c bsdfinterp.c)
 target_link_libraries(bsdf2ttree rtrad)

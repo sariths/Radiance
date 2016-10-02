@@ -76,7 +76,6 @@ static long  lastpos = -1;		/* last flush position */
 #define	 AMBFLUSH	(BUFSIZ/AMBVALSIZ)
 
 #define	 newambval()	(AMBVAL *)malloc(sizeof(AMBVAL))
-#define  freeav(av)	free((void *)av);
 
 static void initambfile(int creat);
 static void avsave(AMBVAL *av);
@@ -184,9 +183,7 @@ setambient(void)				/* initialize calculation */
 					(flen - lastpos)/AMBVALSIZ);
 			error(WARNING, errmsg);
 			fseek(ambfp, lastpos, SEEK_SET);
-#ifndef _WIN32 /* XXX we need a replacement for that one */
 			ftruncate(fileno(ambfp), (off_t)lastpos);
-#endif
 		}
 	} else if ((ambfp = fopen(ambfile, "w+")) != NULL) {
 		initambfile(1);			/* else create new file */
@@ -216,7 +213,7 @@ ambdone(void)			/* close ambient file and free memory */
 		lastpos = -1;
 	}
 					/* free ambient tree */
-	unloadatree(&atrunk, &avfree);
+	unloadatree(&atrunk, avfree);
 					/* reset state variables */
 	avsum = 0.;
 	navsum = 0;
@@ -1074,7 +1071,7 @@ newambtree(void)				/* allocate 8 ambient tree structs */
 	}
 	atp = atfreelist;
 	atfreelist = atp->kid;
-	memset((char *)atp, '\0', 8*sizeof(AMBTREE));
+	memset(atp, 0, 8*sizeof(AMBTREE));
 	return(atp);
 }
 
@@ -1100,6 +1097,7 @@ unloadatree(			/* unload an ambient value tree */
 					/* transfer values at this node */
 	for (av = at->alist; av != NULL; av = at->alist) {
 		at->alist = av->next;
+		av->next = NULL;
 		(*f)(av);
 	}
 	if (at->kid == NULL)
@@ -1177,8 +1175,8 @@ avlmemi(				/* find list position from address */
 {
 	AMBVAL  **avlpp;
 
-	avlpp = (AMBVAL **)bsearch((char *)&avaddr, (char *)avlist2,
-			nambvals, sizeof(AMBVAL *), &aposcmp);
+	avlpp = (AMBVAL **)bsearch(&avaddr, avlist2,
+			nambvals, sizeof(AMBVAL *), aposcmp);
 	if (avlpp == NULL)
 		error(CONSISTENCY, "address not found in avlmemi");
 	return(avlpp - avlist2);
@@ -1221,12 +1219,12 @@ sortambvals(			/* resort ambient values */
 	}
 	if (avlist1 == NULL) {		/* no time tracking -- rebuild tree? */
 		if (avlist2 != NULL)
-			free((void *)avlist2);
+			free(avlist2);
 		if (always) {		/* rebuild without sorting */
 			oldatrunk = atrunk;
 			atrunk.alist = NULL;
 			atrunk.kid = NULL;
-			unloadatree(&oldatrunk, &avinsert);
+			unloadatree(&oldatrunk, avinsert);
 		}
 	} else {			/* sort memory by last access time */
 		/*
@@ -1243,13 +1241,13 @@ sortambvals(			/* resort ambient values */
 		eputs(errmsg);
 #endif
 		i_avlist = 0;
-		unloadatree(&atrunk, &av2list);	/* empty current tree */
+		unloadatree(&atrunk, av2list);	/* empty current tree */
 #ifdef DEBUG
 		if (i_avlist < nambvals)
 			error(CONSISTENCY, "missing ambient values in sortambvals");
 #endif
-		qsort((char *)avlist1, nambvals, sizeof(struct avl), alatcmp);
-		qsort((char *)avlist2, nambvals, sizeof(AMBVAL *), aposcmp);
+		qsort(avlist1, nambvals, sizeof(struct avl), alatcmp);
+		qsort(avlist2, nambvals, sizeof(AMBVAL *), aposcmp);
 		for (i = 0; i < nambvals; i++) {
 			if (avlist1[i].p == NULL)
 				continue;
@@ -1265,8 +1263,8 @@ sortambvals(			/* resort ambient values */
 			avinsert(avlist2[j]);
 			avlist1[j].p = NULL;
 		}
-		free((void *)avlist1);
-		free((void *)avlist2);
+		free(avlist1);
+		free(avlist2);
 						/* compute new sort interval */
 		sortintvl = ambclock - lastsort;
 		if (sortintvl >= MAX_SORT_INTVL/2)

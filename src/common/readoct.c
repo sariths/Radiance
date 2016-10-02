@@ -11,17 +11,12 @@ static const char	RCSid[] = "$Id$";
 #include  <time.h>
 
 #include  "platform.h"
-#include  "rtprocess.h"
+#include  "paths.h"
 #include  "standard.h"
 #include  "octree.h"
 #include  "object.h"
 #include  "otypes.h"
 #include  "resolu.h"
-
-#ifdef getc_unlocked		/* avoid horrendous overhead of flockfile */
-#undef getc
-#define getc    getc_unlocked
-#endif
 
 static double  ogetflt(void);
 static long  ogetint(int);

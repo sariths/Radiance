@@ -1,11 +1,17 @@
+#ifndef lint
+static const char RCSid[] = "$Id$";
+#endif
+
 /* 
-   ==================================================================
+   ======================================================================
    Photon map generator
    
    Roland Schregle (roland.schregle@{hslu.ch, gmail.com})
    (c) Fraunhofer Institute for Solar Energy Systems,
        Lucerne University of Applied Sciences & Arts
-   ==================================================================
+   (c) Lucerne University of Applied Sciences and Arts,
+       supported by the Swiss National Science Foundation (SNSF, #147053)
+   ======================================================================
    
    $Id$    
 */
@@ -29,22 +35,27 @@ extern char VersionID [];
 
 
 
-char* progname;                         /* argv[0] */
-int  dimlist [MAXDIM];                  /* sampling dimensions */
-int  ndims = 0;                         /* number of sampling dimenshunns */
-char* octname = NULL;                   /* octree name */
-CUBE thescene;                          /* scene top-level octree */
-OBJECT nsceneobjs;                      /* number of objects in scene */
-double srcsizerat = 0.01;               /* source partition size ratio */
-int backvis = 1;                        /* back face visibility */
-int clobber = 0;                        /* overwrite output */
-COLOR cextinction = BLKCOLOR;           /* global extinction coefficient */
-COLOR salbedo = BLKCOLOR;               /* global scattering albedo */
-double seccg = 0;                       /* global scattering eccentricity */
-int ambincl = -1;                       /* photon port flag */
-char *amblist [AMBLLEN + 1];            /* photon port list */
-char *diagFile = NULL;                  /* diagnostics output file */
-int rand_samp = 1;			/* uncorrelated random sampling */
+char*    progname;                  /* argv[0] */
+int      dimlist [MAXDIM];          /* sampling dimensions */
+int      ndims = 0;                 /* number of sampling dimenshunns */
+char*    octname = NULL;            /* octree name */
+CUBE     thescene;                  /* scene top-level octree */
+OBJECT   nsceneobjs;                /* number of objects in scene */
+double   srcsizerat = 0.01;         /* source partition size ratio */
+int      backvis = 1;               /* back face visibility */
+int      clobber = 0;               /* overwrite output */
+COLOR    cextinction = BLKCOLOR;    /* global extinction coefficient */
+COLOR    salbedo = BLKCOLOR;        /* global scattering albedo */
+double   seccg = 0;                 /* global scattering eccentricity */
+int      ambincl = -1;              /* photon port flag */
+char     *amblist [AMBLLEN + 1];    /* photon port list */
+char     *diagFile = NULL;          /* diagnostics output file */
+int      rand_samp = 1;             /* uncorrelated random sampling */
+unsigned nproc = 1;                 /* number of parallel processes */
+#ifdef EVALDRC_HACK
+   char  *angsrcfile = NULL;        /* angular source file for EvalDRC */
+#endif
+
 
 
 /* Dummies for linkage */
@@ -92,14 +103,18 @@ void printdefaults()
    printf("-e   %s\t\t\t# diagnostics output file\n", diagFile);
    printf(clobber ? "-fo+\t\t\t\t# force overwrite"
                   : "-fo-\t\t\t\t# do not overwrite\n");
+#if 0
+   /* Heap size increment now fixed & defined by macro in pmapkdt.c */
    printf("-i   %-9ld\t\t\t# photon heap size increment\n", 
           photonHeapSizeInc);
+#endif          
    printf("-ma  %.2f %.2f %.2f\t\t# scattering albedo\n", 
           colval(salbedo,RED), colval(salbedo,GRN), colval(salbedo,BLU));
    printf("-me  %.2e %.2e %.2e\t# extinction coefficient\n", 
           colval(cextinction,RED), colval(cextinction,GRN), 
           colval(cextinction,BLU));          
    printf("-mg  %.2f\t\t\t# scattering eccentricity\n", seccg);
+   printf("-n   %d\t\t\t\t# number of parallel processes\n", nproc);
    printf("-t   %-9d\t\t\t# time between reports\n", photonRepTime);
 
 #ifdef PMAP_ROI
@@ -108,6 +123,11 @@ void printdefaults()
           pmapROI [0], pmapROI [1], pmapROI [2], pmapROI [3], 
           pmapROI [4], pmapROI [5]);
 #endif   
+
+#ifdef EVALDRC_HACK
+   /* ... and ziss one... */
+   puts("-A\t\t\t\t# angular source file");
+#endif
 }
 
 
@@ -119,7 +139,7 @@ int main (int argc, char* argv [])
                              badarg(argc - i - 1,argv + i + 1, al)) \
                             goto badopt
                             
-   #define bool(olen, var) switch (argv [i][olen]) { \
+   #define check_bool(olen, var) switch (argv [i][olen]) { \
                              case '\0': var = !var; break; \
                              case 'y': case 'Y': case 't': case 'T': \
                              case '+': case '1': var = 1; break; \
@@ -297,8 +317,9 @@ int main (int argc, char* argv [])
                
                if (argv[i][3] == 'O') {	
                   /* Get port modifiers file */
-                  rval = wordfile(portLp, getpath(argv [++i],
-                                  getrlibpath(), R_OK));
+                  rval = wordfile(portLp, AMBLLEN-(portLp-amblist),
+                                  getpath(argv [++i], getrlibpath(), R_OK));
+                                  
                   if (rval < 0) {
                       sprintf(errmsg, "cannot open photon port file %s",
                               argv [i]);
@@ -328,8 +349,9 @@ int main (int argc, char* argv [])
                
                if (argv[i][3] == 'S') {	
                   /* Get sensor modifiers from file */
-                  rval = wordfile(sensLp, getpath(argv [++i],
-                                  getrlibpath(), R_OK));
+                  rval = wordfile(sensLp, MAXSET-(sensLp-photonSensorList),
+                                  getpath(argv [++i], getrlibpath(), R_OK));
+                                  
                   if (rval < 0) {
                       sprintf(errmsg, "cannot open antimatter sensor file %s",
                               argv [i]);
@@ -352,7 +374,7 @@ int main (int argc, char* argv [])
          case 'b': 
             if (argv [i][2] == 'v') {
                /* Back face visibility */
-               bool(3, backvis);
+               check_bool(3, backvis);
             }
                    
             else goto badopt;
@@ -382,16 +404,19 @@ int main (int argc, char* argv [])
          case 'f': 
             if (argv [i][2] == 'o') {
                /* Force overwrite */
-               bool(3, clobber);
+               check_bool(3, clobber);
             }
                    
             else goto badopt;
             break; 
-            
+
+#if 0
+         /* Heap size increment now fixed & defined by macro in pmapkdt.c */            
          case 'i': /* Photon heap size increment */
             check(2, "i");
             photonHeapSizeInc = atol(argv [++i]);
             break;
+#endif            
                    
          case 'm': /* Medium */
             switch (argv[i][2]) {
@@ -417,11 +442,31 @@ int main (int argc, char* argv [])
                default: goto badopt;
             }                   
             break;
-                   
+
+         case 'n': /* Num parallel processes */
+            check(2, "i");
+            nproc = atoi(argv [++i]);
+            
+            if (nproc > PMAP_MAXPROC) {
+               nproc = PMAP_MAXPROC;
+               sprintf(errmsg, "too many parallel processes, clamping to "
+                       "%d\n", nproc);
+               error(WARNING, errmsg);
+            }
+            
+            break;                   
+            
          case 't': /* Timer */
             check(2, "i");
             photonRepTime = atoi(argv [++i]);
             break;
+
+#ifdef EVALDRC_HACK
+         case 'A':   /* Angular source file */
+            check(2,"s");
+            angsrcfile = argv[++i];
+            break;                   
+#endif
                    
          default: goto badopt;
       }
@@ -462,6 +507,12 @@ int main (int argc, char* argv [])
       error(USER, "no photon maps specified");
    
    readoct(octname, loadflags, &thescene, NULL);
+
+#ifdef EVALDRC_HACK   
+   if (angsrcfile)
+      readobj(angsrcfile);    /* load angular sources */
+#endif      
+      
    nsceneobjs = nobjects;
    
    /* Get sources */
@@ -470,9 +521,9 @@ int main (int argc, char* argv [])
    /* Do forward pass and build photon maps */
    if (contribPmap)
       /* Just build contrib pmap, ignore others */
-      distribPhotonContrib(contribPmap);
+      distribPhotonContrib(contribPmap, nproc);
    else
-      distribPhotons(photonMaps);
+      distribPhotons(photonMaps, nproc);
    
    /* Save photon maps; no idea why GCC needs an explicit cast here... */
    savePmaps((const PhotonMap**)photonMaps, argc, argv);
@@ -485,6 +536,6 @@ badopt:
    error(USER, errmsg);
 
    #undef check
-   #undef bool
+   #undef check_bool
    return 0;
 }

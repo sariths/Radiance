@@ -9,32 +9,14 @@
 #define _RAD_PROCESS_H_
 
 #include  <errno.h>
-#ifdef _WIN32
+#include <stdio.h>
+#if defined(_WIN32) || defined(_WIN64)
   #include <windows.h> /* DWORD etc. */
-  #include <stdio.h>
   typedef DWORD RT_PID;
   #include <process.h> /* getpid() and others */
-  #define nice(inc) win_nice(inc)
-
-  #ifdef __cplusplus
-  extern "C" {
-  #endif
-  extern FILE *win_popen(char *command, char *type);
-  extern int win_pclose(FILE *p);
-  int win_kill(RT_PID pid, int sig /* ignored */);
-  #define kill(pid,sig) win_kill(pid,sig)
-  #ifdef __cplusplus
-  }
-  #endif
-  #ifdef _MSC_VER
-    #define popen(cmd,mode) _popen(cmd,mode)
-    #define pclose(p) _pclose(p)
-  #else
-    #define popen(cmd,mode) win_popen(cmd,mode)
-    #define pclose(p) win_pclose(p)
-  #endif
+  #define getpid _getpid
+  #define execv _execv
 #else
-  #include <stdio.h>
   #include <sys/param.h>
   #include <sys/types.h>
   typedef pid_t RT_PID;
@@ -77,14 +59,17 @@ typedef struct {
 
 #define SP_INACTIVE {-1,-1,0,0} /* for static initializations */
 
+#define close_process(pd)	close_processes(pd,1)
+
 extern int open_process(SUBPROC *pd, char *av[]);
-extern int close_process(SUBPROC *pd);
+extern int close_processes(SUBPROC pd[], int nproc);
 extern int process(SUBPROC *pd, char *recvbuf, char *sendbuf, int nbr, int nbs);
 extern int readbuf(int fd, char *bpos, int siz);
 extern int writebuf(int fd, char *bpos, int siz);
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
 /* any non-negative increment will send the process to IDLE_PRIORITY_CLASS. */
+extern int win_kill(RT_PID pid, int sig /* ignored */);
 extern int win_nice(int inc);
 #endif
 

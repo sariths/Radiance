@@ -13,13 +13,6 @@ static const char	RCSid[] = "$Id$";
 
 #include <math.h>
 
-#ifdef getc_unlocked		/* avoid horrendous overhead of flockfile */
-#undef getc
-#undef putc
-#define getc    getc_unlocked
-#define putc    putc_unlocked
-#endif
-
 
 void
 putstr(				/* write null-terminated string to fp */
@@ -40,8 +33,9 @@ putint(				/* write a siz-byte integer to fp */
 	FILE  *fp
 )
 {
-	while (siz--)
-		putc((int)(i>>(siz<<3) & 0xff), fp);
+	siz <<= 3;
+	while ((siz -= 8) >= 0)
+		putc((int)(i>>siz & 0xff), fp);
 }
 
 
@@ -64,6 +58,26 @@ putflt(				/* put out floating point number */
 	}
 	putint(m, 4, fp);
 	putint((long)e, 1, fp);
+}
+
+
+int
+putbinary(			/* fwrite() replacement for small objects */
+	const void *p,
+	int elsiz,
+	int nel,
+	FILE *fp)
+{
+	const char	*s = (const char *)p;
+	int		nbytes = elsiz*nel;
+
+	if (nbytes > 512)
+		return(fwrite(p, elsiz, nel, fp));
+	
+	while (nbytes-- > 0)
+		putc(*s++, fp);
+
+	return(nel);
 }
 
 
@@ -124,4 +138,27 @@ getflt(				/* get a floating point number */
 	}
 	d = (l + (l > 0 ? .5 : -.5)) * (1./0x7fffffff);
 	return(ldexp(d, (int)getint(1, fp)));
+}
+
+
+int
+getbinary(			/* fread() replacement for small objects */
+	void *p,
+	int elsiz,
+	int nel,
+	FILE *fp)
+{
+	char	*s = (char *)p;
+	int	nbytes = elsiz*nel;
+	int	c;
+
+	if (nbytes > 512)
+		return(fread(p, elsiz, nel, fp));
+	
+	while (nbytes-- > 0) {
+		if ((c = getc(fp)) == EOF)
+			return((elsiz*nel - nbytes)/elsiz);
+		*s++ = c;
+	}
+	return(nel);
 }

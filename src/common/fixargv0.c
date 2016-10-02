@@ -7,29 +7,29 @@ static const char	RCSid[] = "$Id$";
  *  External symbols declared in paths.h
  */
 
-#include "copyright.h"
-
 #include <ctype.h>
+#include <string.h>
 
-extern char *
-fixargv0(av0)			/* extract command name from full path */
-char  *av0;
+char *
+fixargv0(char *av0)		/* extract command name from full path */
 {
-	register char  *cp = av0;
+	char  *cp = av0, *end;
 
 	while (*cp) cp++;		/* start from end */
+	end = cp;
 	while (cp-- > av0)
 		switch (*cp) {		/* fix up command name */
 		case '.':			/* remove extension */
 			*cp = '\0';
+			end = cp;
 			continue;
 		case '\\':			/* remove directory */
-			return(cp+1);
+			/* make sure the original pointer remains the same */
+			memmove(av0, cp+1, end-cp);
+			return(av0);
 		default:			/* convert to lower case */
 			*cp = tolower(*cp);
 			continue;
 		}
 	return(av0);
 }
-
-
